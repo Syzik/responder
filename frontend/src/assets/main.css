@@ -1,0 +1,8 @@
+hr {
+  border-color: #000;
+}
+
+.text-wrap {
+  /* white-space: pre-wrap; */
+  overflow-wrap: anywhere;
+}

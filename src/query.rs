@@ -39,7 +39,7 @@ where
     D: Deserializer<'de>,
 {
     match String::deserialize(deserializer)?.as_str() {
-        "false" | "f" | "no" | "n" => Ok(false),
+        "false" | "f" | "no" | "n" | "0" => Ok(false),
         _ => Ok(true),
     }
 }
