@@ -1,5 +1,6 @@
 import './assets/main.css'
 import 'primevue/resources/themes/aura-dark-green/theme.css'
+import 'primeicons/primeicons.css'
 import 'primeflex/primeflex.css'
 
 import { createApp } from 'vue'

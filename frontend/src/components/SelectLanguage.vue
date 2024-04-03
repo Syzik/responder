@@ -26,7 +26,7 @@ function onChange() {
     v-model="selected"
     editable
     :options="filtered"
-    optionLabel="mime"
+    optionLabel="name"
     placeholder="Choose a MIME type"
     class="w-full md:w-14rem"
     @change="onChange"
