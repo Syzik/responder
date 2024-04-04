@@ -13,16 +13,18 @@ function codeToReasonPhrase(code) {
 </script>
 
 <template>
-  <strong class="mr-2 text-primary">Status:</strong>
-  <InputNumber
-    inputClass="status h-2rem"
-    highlightOnFocus
-    :useGrouping="false"
-    v-model="status"
-    :min="100"
-    :max="699"
-  />
-  - {{ codeToReasonPhrase(status) }}
+  <div>
+    <strong class="mr-2 text-primary">Status:</strong>
+    <InputNumber
+      inputClass="status h-2rem"
+      highlightOnFocus
+      :useGrouping="false"
+      v-model="status"
+      :min="100"
+      :max="699"
+    />
+    - {{ codeToReasonPhrase(status) }}
+  </div>
 </template>
 
 <style>

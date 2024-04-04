@@ -15,7 +15,8 @@ import Column from "primevue/column"
 import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
-
+import InputSwitch from 'primevue/inputswitch'
+import Tooltip from 'primevue/tooltip';
 
 import { install as VueMonacoEditorPlugin } from '@guolao/vue-monaco-editor'
 
@@ -28,6 +29,8 @@ createApp(App)
   .component('InputNumber', InputNumber)
   .component('InputText', InputText)
   .component('Textarea', Textarea)
+  .component('InputSwitch', InputSwitch)
+  .directive('tooltip', Tooltip)
   .use(PrimeVue, { ripple: true })
   .use(VueMonacoEditorPlugin, {
     paths: {
