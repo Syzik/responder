@@ -12,7 +12,10 @@
   },
   "dependencies": {
     "@guolao/vue-monaco-editor": "^1.5.1",
+    "emmet-monaco-es": "^5.3.2",
     "http-status-codes": "^2.3.0",
+    "mime": "^4.0.1",
+    "mime-types": "^2.1.35",
     "primeflex": "^3.3.1",
     "primeicons": "^7.0.0",
     "primevue": "^3.50.0",

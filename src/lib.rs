@@ -3,9 +3,9 @@ use axum::{
     extract::Request,
     response::{Html, IntoResponse},
 };
-use query::Response;
+use response::Response;
 
-pub mod query;
+pub mod response;
 
 pub async fn index(request: Request) -> Result<axum::response::Response, String> {
     let path = request.uri().path().to_string();

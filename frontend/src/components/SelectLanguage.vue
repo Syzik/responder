@@ -1,7 +1,7 @@
 <script setup>
 const model = defineModel()
 
-const languages = ['html', 'javascript', 'json', 'xml', 'css']
+const languages = ['html', 'javascript', 'json', 'xml', 'css', 'plain']
 </script>
 
 <template>
