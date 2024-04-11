@@ -1,7 +1,9 @@
 <script setup>
 import { computed, ref, shallowRef } from 'vue'
 import { SelectLanguage, HeaderTable, StatusField } from '@/components'
-import { CORS_HEADERS } from '@/utils/constants'
+import { CORS_HEADERS, SNIPPETS, TIPS, hasCORS } from '@/utils'
+
+import { useToast } from 'primevue/usetoast'
 import { emmetHTML } from 'emmet-monaco-es'
 import mime from 'mime'
 
@@ -10,6 +12,7 @@ const base64Checked = ref(false)
 const code = ref(`<h1>Hello, world!</h1>`)
 const language = ref('html')
 const filename = ref('poc.html')
+const status = ref(200)
 const headers = ref(
   new Map([
     ['Content-Type', 'text/html'],
@@ -17,6 +20,8 @@ const headers = ref(
   ])
 )
 const url = ref(computed(() => getFinalURL()))
+const toast = useToast()
+const currentTip = ref(0)
 
 const MONACO_EDITOR_OPTIONS = {
   automaticLayout: true,
@@ -37,6 +42,27 @@ const handleMount = (editor) => {
       formatCode()
     }
   })
+
+  for (const [language, snippet] of Object.entries(SNIPPETS)) {
+    for (const [name, value] of Object.entries(snippet)) {
+      window.monaco.languages.registerCompletionItemProvider(language, {
+        provideCompletionItems: () => {
+          return {
+            suggestions: [
+              {
+                label: name,
+                documentation: value['description'],
+                kind: window.monaco.languages.CompletionItemKind.Snippet,
+                insertTextRules:
+                  window.monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                insertText: value['code']
+              }
+            ]
+          }
+        }
+      })
+    }
+  }
 }
 
 function formatCode() {
@@ -67,10 +93,16 @@ function getFinalURL() {
   const url = new URL(location.origin)
 
   url.pathname = filename.value || ''
-  url.searchParams.set('body', body)
+  if (body) {
+    url.searchParams.set('body', body)
+  }
+
+  if (status.value !== 200) {
+    url.searchParams.set('status', status.value)
+  }
 
   const headers_ = new Map(headers.value)
-  if (Object.entries(CORS_HEADERS).every(([name, value]) => headers.value.get(name) === value)) {
+  if (hasCORS(headers)) {
     url.searchParams.set('cors', 'true')
     Object.keys(CORS_HEADERS).forEach((name) => headers_.delete(name))
   }
@@ -90,10 +122,22 @@ function getFinalURL() {
     }
   }
 
-  return url.pathname + url.search.replace(/%5B/g, '[').replace(/%5D/g, ']')
+  const search = url.search || '?'
+  return url.pathname + search.replace(/%5B/g, '[').replace(/%5D/g, ']')
 }
 function copyFinalURL(text) {
   navigator.clipboard.writeText(location.origin + text)
+}
+
+function showRandomTip() {
+  const tip = TIPS[currentTip.value]
+  currentTip.value = (currentTip.value + 1) % TIPS.length
+  toast.add({
+    severity: 'info',
+    life: 15000,
+    summary: tip.title,
+    detail: tip.description
+  })
 }
 
 addEventListener('beforeunload', (event) => {
@@ -102,6 +146,7 @@ addEventListener('beforeunload', (event) => {
 </script>
 
 <template>
+  <Toast position="bottom-left"></Toast>
   <div class="mx-4">
     <h1 class="hover-flip inline-block">
       <a href="https://github.com/JorianWoltjer/responder" target="_blank">
@@ -110,7 +155,7 @@ addEventListener('beforeunload', (event) => {
       <span class="bg-primary">Responder</span>
     </h1>
     <div class="flex flex-wrap">
-      <div class="flex-1 border-round mr-4 relative">
+      <div class="flex-1 border-round mr-4 mb-3 relative">
         <vue-monaco-editor
           v-model:value="code"
           theme="vs-dark"
@@ -132,8 +177,17 @@ addEventListener('beforeunload', (event) => {
             <SelectLanguage v-model="language" @change="changeLanguage" />
             <div class="inline absolute right-0 mx-2">
               <Button
-                :icon="previewChecked ? 'pi pi-eye' : 'pi pi-eye-slash'"
+                class="mr-2"
+                title="Show a random tip"
+                icon="pi pi-bell"
                 aria-label="Preview"
+                severity="secondary"
+                @click="showRandomTip()"
+              />
+              <Button
+                :icon="previewChecked ? 'pi pi-eye' : 'pi pi-eye-slash'"
+                title="Live Preview"
+                aria-label="Live Preview"
                 :severity="previewChecked ? 'primary' : 'secondary'"
                 @click="previewChecked = !previewChecked"
               />
@@ -141,8 +195,8 @@ addEventListener('beforeunload', (event) => {
           </div>
         </div>
       </div>
-      <div class="flex-1 flex flex-column">
-        <StatusField />
+      <div class="flex-1 flex flex-column mb-3">
+        <StatusField v-model="status" />
         <HeaderTable v-model="headers" class="mb-3" />
         <div class="mt-auto w-full">
           <hr />

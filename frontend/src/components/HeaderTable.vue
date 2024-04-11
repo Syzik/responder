@@ -1,9 +1,11 @@
 <script setup>
 import { ref, watchEffect } from 'vue'
-import { CORS_HEADERS } from '@/utils/constants'
+import { CORS_HEADERS, HTTP_HEADERS, hasCORS } from '@/utils'
 
 const model = defineModel()
 const headers = ref(new Map(model.value))
+// const suggestions = computed(() => HTTP_HEADERS.filter((header) => !headers.value.has(header)))
+const suggestions = ref(HTTP_HEADERS)
 
 watchEffect(() => {
   headers.value = new Map(model.value)
@@ -51,11 +53,24 @@ const removeHeader = (name) => {
 }
 
 const addCORSHeaders = () => {
-  for (const [name, value] of Object.entries(CORS_HEADERS)) {
-    headers.value.set(name, value)
+  if (hasCORS(headers)) {
+    for (const [name] of Object.entries(CORS_HEADERS)) {
+      headers.value.delete(name)
+    }
+  } else {
+    for (const [name, value] of Object.entries(CORS_HEADERS)) {
+      headers.value.set(name, value)
+    }
   }
 
   reloadHeaders()
+}
+
+const search = (event) => {
+  suggestions.value = HTTP_HEADERS.filter(
+    (header) =>
+      header.toLowerCase().includes(event.query.toLowerCase()) && !headers.value.has(header)
+  )
 }
 </script>
 
@@ -65,7 +80,7 @@ const addCORSHeaders = () => {
       <h2 class="inline">Headers</h2>
       <Button
         label="CORS"
-        title="Add allow-all CORS headers"
+        v-tooltip.top="{ value: 'allow-all CORS headers' }"
         severity="primary"
         rounded
         size="small"
@@ -117,7 +132,16 @@ const addCORSHeaders = () => {
           </div>
         </template>
         <template #editor="{ data, field }">
-          <InputText class="w-full" v-model="data[field]" @mouseleave="deleteIndex = -1" />
+          <AutoComplete
+            :suggestions="suggestions"
+            class="w-full"
+            v-model="data[field]"
+            completeOnFocus
+            autoOptionFocus
+            emptySearchMessage=" "
+            @complete="search"
+            @mouseleave="deleteIndex = -1"
+          />
         </template>
       </Column>
       <Column class="text-wrap h-3rem p-0" field="1" style="width: 50%">

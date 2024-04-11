@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error, str::FromStr};
+use std::{collections::HashMap, str::FromStr};
 
 use axum::{
     http::{HeaderName, HeaderValue, StatusCode},
@@ -7,6 +7,8 @@ use axum::{
 use b64::FromBase64;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Deserializer, Serialize};
+
+use crate::{parse_gist_url, Err};
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Response {
@@ -22,6 +24,7 @@ pub struct Response {
         default
     )]
     body_b64: Option<String>,
+    gist: Option<String>,
     #[serde(alias = "h", default)]
     pub headers: HashMap<String, String>,
     #[serde(default, deserialize_with = "deserialize_bool")]
@@ -59,15 +62,20 @@ lazy_static! {
 }
 
 impl Response {
-    pub fn get_body(&self) -> Result<Vec<u8>, b64::FromBase64Error> {
-        Ok(match (&self.body, &self.body_b64) {
-            (Some(body), _) => body.clone().into(),
-            (None, Some(body_b64)) => body_b64.replace(' ', "+").as_str().from_base64()?,
-            _ => vec![],
+    pub async fn get_body(&self) -> Result<Vec<u8>, Err> {
+        Ok(if let Some(body) = &self.body {
+            body.clone().into()
+        } else if let Some(body_b64) = &self.body_b64 {
+            body_b64.replace(' ', "+").as_str().from_base64()?
+        } else if let Some(gist) = &self.gist {
+            let url = parse_gist_url(gist)?;
+            reqwest::get(url).await?.bytes().await?.to_vec()
+        } else {
+            vec![]
         })
     }
 
-    fn try_into_response(self) -> Result<axum::response::Response, Box<dyn error::Error>> {
+    async fn try_into_response(self) -> Result<axum::response::Response, Err> {
         let mut response = axum::response::Response::builder().status(self.status);
 
         // Add requested headers and resolve aliases
@@ -78,11 +86,22 @@ impl Response {
         }
         // Set Content-Type from path extension if not set
         headers.entry("content-type").or_insert(
-            self.path
-                .as_deref()
-                .and_then(|path| mime_guess::from_path(path).first_raw())
-                .map(|mime| HeaderValue::from_str(mime).expect("mime_guess is valid"))
-                .unwrap_or(HeaderValue::from_static("text/plain")),
+            HeaderValue::from_str(
+                self.path
+                    .as_deref()
+                    // Guess from path extension
+                    .and_then(|path| mime_guess::from_path(path).first_raw())
+                    .unwrap_or(
+                        &self
+                            .gist
+                            .clone()
+                            // Guess from gist URL
+                            .map(|gist| mime_guess::from_path(gist).first_raw())
+                            .flatten()
+                            .unwrap_or("text/plain"),
+                    ),
+            )
+            .expect("mime_guess is valid"),
         );
         // Allow all Cross-Origin Resource Sharing
         if self.cors {
@@ -92,14 +111,15 @@ impl Response {
             headers.insert("Access-Control-Allow-Headers", any);
         }
 
-        Ok(response.body(self.get_body()?.into())?)
+        Ok(response.body(self.get_body().await?.into())?)
     }
 }
 
-impl IntoResponse for Response {
-    fn into_response(self) -> axum::response::Response {
+impl Response {
+    pub async fn into_response(self) -> axum::response::Response {
         match self
             .try_into_response()
+            .await
             .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response())
         {
             Ok(response) | Err(response) => response,
@@ -213,7 +233,6 @@ mod tests {
         let query_string = "body.b64=SGVsbG8sIHdvcmxkIQ%3D"; // invalid padding, should be '=='
 
         let response: Response = serde_qs::from_str(query_string).unwrap();
-        dbg!(&response);
 
         assert_eq!(response.body_b64, Some("SGVsbG8sIHdvcmxkIQ=".to_string()));
         assert_eq!(response.get_body().unwrap(), b"Hello, world!");

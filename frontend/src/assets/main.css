@@ -17,7 +17,7 @@ hr {
 }
 
 .text-wrap {
-  /* white-space: pre-wrap; */
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 

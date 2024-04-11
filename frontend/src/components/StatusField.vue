@@ -1,9 +1,8 @@
 <script setup>
-import { ref } from 'vue'
 import { getReasonPhrase } from 'http-status-codes'
 
-// TODO: make this a model
-const status = ref(200)
+const status = defineModel()
+
 function codeToReasonPhrase(code) {
   try {
     return `"${getReasonPhrase(code)}"`
