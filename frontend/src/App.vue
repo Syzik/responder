@@ -94,7 +94,8 @@ function getFinalURL() {
 
   url.pathname = filename.value || ''
   if (body) {
-    url.searchParams.set('body', body)
+    const body_param = base64Checked.value ? 'b64' : 'body'
+    url.searchParams.set(body_param, body)
   }
 
   if (status.value !== 200) {
