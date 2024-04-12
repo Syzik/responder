@@ -48,6 +48,7 @@ where
 }
 
 lazy_static! {
+    // Mirrored in frontend/src/utils/index.js -> const HEADER_ALIAS
     static ref HEADER_ALIAS: HashMap<&'static str, &'static str> = {
         let mut map = HashMap::new();
         map.insert("ct", "content-type");

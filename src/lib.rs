@@ -12,7 +12,16 @@ pub mod response;
 
 type Err = Box<dyn error::Error>;
 
-const GIST_REGEX: &str = r"^(gist\.github\.com|gist\.githubusercontent\.com)/([\w\.]+/[a-f0-9]+)(?:/(blob|raw))?(?:/)?([\w\.]+)?(?:/)?(.+)?";
+const GIST_REGEXES: &[(&str, &str)] = &[
+    (
+        r"^gist\.(?:github|githubusercontent)\.com/(.+?)/([a-f0-9]+)$",
+        "https://gist.githubusercontent.com/$1/$2/raw",
+    ),
+    (
+        r"^gist\.(?:github|githubusercontent)\.com/(.+?)/([a-f0-9]+)/raw/(.+)$",
+        "https://gist.githubusercontent.com/$1/$2/raw/$3",
+    ),
+];
 
 pub async fn index(request: Request) -> Result<axum::response::Response, String> {
     let path = request.uri().path().to_string();
@@ -49,17 +58,13 @@ pub fn parse_gist_url(url: &str) -> Result<String, Err> {
         );
     };
 
-    let re = Regex::new(GIST_REGEX).unwrap();
-    if let Some(captures) = re.captures(url) {
-        let domain = captures.get(1).unwrap().as_str();
-        let user_and_id = captures.get(2).unwrap().as_str();
-        let blob_or_raw = captures.get(3).map(|m| m.as_str()).unwrap_or("raw");
-        let hash = captures.get(4).map(|m| m.as_str()).unwrap_or_default();
-        let file = captures.get(5).map(|m| m.as_str()).unwrap_or_default();
-        Ok(format!(
-            "https://{domain}/{user_and_id}/{blob_or_raw}/{hash}/{file}"
-        ))
-    } else {
-        Err("Invalid Gist URL".into())
+    for (regex, replacement) in GIST_REGEXES {
+        let re = Regex::new(regex).unwrap();
+        if re.captures(url).is_some() {
+            let replaced = re.replace(url, *replacement);
+            return Ok(replaced.to_string());
+        }
     }
+
+    Err("Unrecognized gist URL format".into())
 }

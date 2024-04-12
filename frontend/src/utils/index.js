@@ -102,6 +102,14 @@ export function hasCORS(headers) {
   return Object.entries(CORS_HEADERS).every(([name, value]) => headers.value.get(name) === value)
 }
 
+// Mirrored in src/lib.rs -> HEADER_ALIAS: HashMap
+export const HEADER_ALIAS = {
+  "content-type": "ct",
+  "set-cookie": "c",
+  "location": "l",
+  "content-security-policy": "csp",
+}
+
 export function shuffle(array) {
   return array.map(value => ({ value, sort: Math.random() }))
     .sort((a, b) => a.sort - b.sort)

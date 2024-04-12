@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, shallowRef } from 'vue'
 import { SelectLanguage, HeaderTable, StatusField } from '@/components'
-import { CORS_HEADERS, SNIPPETS, TIPS, hasCORS } from '@/utils'
+import { CORS_HEADERS, HEADER_ALIAS, SNIPPETS, TIPS, hasCORS } from '@/utils'
 
 import { useToast } from 'primevue/usetoast'
 import { emmetHTML } from 'emmet-monaco-es'
@@ -107,17 +107,18 @@ function getFinalURL() {
     Object.keys(CORS_HEADERS).forEach((name) => headers_.delete(name))
   }
 
-  for (const [name, value] of headers_) {
+  for (let [name, value] of headers_) {
     if (name.toLowerCase() === 'content-type') {
       const mimeGuess = mime.getType(filename.value.split('.').pop())
       if (mimeGuess == value) {
         continue // skip if implied by file extension
       }
-      url.searchParams.set('ct', value)
-      continue
     }
 
-    if (name.trim() && value.trim()) {
+    if (HEADER_ALIAS[name.toLowerCase()]) {
+      name = HEADER_ALIAS[name.toLowerCase()]
+    }
+    if (name.trim()) {
       url.searchParams.set(`h[${name}]`, value)
     }
   }
