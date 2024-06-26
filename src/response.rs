@@ -8,7 +8,7 @@ use b64::FromBase64;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::{parse_gist_url, Err};
+use crate::{get_gist_content, Err};
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Response {
@@ -63,21 +63,22 @@ lazy_static! {
 }
 
 impl Response {
-    pub async fn get_body(&self) -> Result<Vec<u8>, Err> {
+    pub async fn get_body(&self) -> Result<(Vec<u8>, Option<String>), Err> {
         Ok(if let Some(body) = &self.body {
-            body.clone().into()
+            (body.clone().into(), None)
         } else if let Some(body_b64) = &self.body_b64 {
-            body_b64.replace(' ', "+").as_str().from_base64()?
+            (body_b64.replace(' ', "+").as_str().from_base64()?, None)
         } else if let Some(gist) = &self.gist {
-            let url = parse_gist_url(gist)?;
-            reqwest::get(url).await?.bytes().await?.to_vec()
+            get_gist_content(gist).await?
         } else {
-            vec![]
+            (vec![], None)
         })
     }
 
     async fn try_into_response(self) -> Result<axum::response::Response, Err> {
         let mut response = axum::response::Response::builder().status(self.status);
+
+        let (body, content_type) = self.get_body().await?;
 
         // Add requested headers and resolve aliases
         let headers = response.headers_mut().expect("builder won't have errors");
@@ -92,15 +93,8 @@ impl Response {
                     .as_deref()
                     // Guess from path extension
                     .and_then(|path| mime_guess::from_path(path).first_raw())
-                    .unwrap_or(
-                        &self
-                            .gist
-                            .clone()
-                            // Guess from gist URL
-                            .map(|gist| mime_guess::from_path(gist).first_raw())
-                            .flatten()
-                            .unwrap_or("text/plain"),
-                    ),
+                    // Take from body, or default to text/plain
+                    .unwrap_or(content_type.as_deref().unwrap_or("text/plain")),
             )
             .expect("mime_guess is valid"),
         );
@@ -112,7 +106,7 @@ impl Response {
             headers.insert("Access-Control-Allow-Headers", any);
         }
 
-        Ok(response.body(self.get_body().await?.into())?)
+        Ok(response.body(body.into())?)
     }
 }
 
@@ -132,31 +126,31 @@ impl Response {
 mod tests {
     use super::*;
 
-    #[test]
-    fn deserialize() {
+    #[tokio::test]
+    async fn deserialize() {
         let query_string = "status=200&body=Hello%2C%20world%21&headers[content-type]=text/plain";
 
         let response: Response = serde_qs::from_str(query_string).unwrap();
 
         assert_eq!(response.body, Some("Hello, world!".to_string()));
-        assert_eq!(response.get_body().unwrap(), b"Hello, world!");
-        let axum_response = response.into_response();
+        assert_eq!(response.get_body().await.unwrap().0, b"Hello, world!");
+        let axum_response = response.into_response().await;
 
         assert_eq!(axum_response.status(), StatusCode::OK);
         let headers = axum_response.headers();
         assert_eq!(headers.get("content-type").unwrap(), "text/plain");
     }
 
-    #[test]
-    fn deserialize_multiple() {
+    #[tokio::test]
+    async fn deserialize_multiple() {
         let query_string =
             "status=404&body=Hello%2C%20world%21&headers[Content-Type]=text/plain&headers[content-length]=42";
 
         let response: Response = serde_qs::from_str(query_string).unwrap();
 
         assert_eq!(response.body, Some("Hello, world!".to_string()));
-        assert_eq!(response.get_body().unwrap(), b"Hello, world!");
-        let axum_response = response.into_response();
+        assert_eq!(response.get_body().await.unwrap().0, b"Hello, world!");
+        let axum_response = response.into_response().await;
 
         assert_eq!(axum_response.status(), StatusCode::NOT_FOUND);
         let headers = axum_response.headers();
@@ -164,42 +158,42 @@ mod tests {
         assert_eq!(headers.get("content-length").unwrap(), "42");
     }
 
-    #[test]
-    fn deserialize_default() {
+    #[tokio::test]
+    async fn deserialize_default() {
         let query_string = "";
 
         let response: Response = serde_qs::from_str(query_string).unwrap();
 
         assert_eq!(response.body, None);
-        assert_eq!(response.get_body().unwrap(), b"");
-        let axum_response = response.into_response();
+        assert_eq!(response.get_body().await.unwrap().0, b"");
+        let axum_response = response.into_response().await;
 
         assert_eq!(axum_response.status(), StatusCode::OK);
         let headers = axum_response.headers();
         assert_eq!(headers.get("content-type").unwrap(), "text/plain");
     }
 
-    #[test]
-    fn deserialize_alias() {
+    #[tokio::test]
+    async fn deserialize_alias() {
         let query_string = "s=500&b=Hello%2C%20world%21&h[content-type]=text/plain";
 
         let response: Response = serde_qs::from_str(query_string).unwrap();
 
         assert_eq!(response.body, Some("Hello, world!".to_string()));
-        assert_eq!(response.get_body().unwrap(), b"Hello, world!");
-        let axum_response = response.into_response();
+        assert_eq!(response.get_body().await.unwrap().0, b"Hello, world!");
+        let axum_response = response.into_response().await;
 
         assert_eq!(axum_response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         let headers = axum_response.headers();
         assert_eq!(headers.get("content-type").unwrap(), "text/plain");
     }
 
-    #[test]
-    fn deserialize_header_alias() {
+    #[tokio::test]
+    async fn deserialize_header_alias() {
         let query_string = "h[l]=file:///etc/passwd&h[ct]=text/html&h[c]=cookie%3D42";
 
         let response: Response = serde_qs::from_str(query_string).unwrap();
-        let axum_response = response.into_response();
+        let axum_response = response.into_response().await;
 
         let headers = axum_response.headers();
         assert_eq!(headers.get("location").unwrap(), "file:///etc/passwd");
@@ -207,12 +201,13 @@ mod tests {
         assert_eq!(headers.get("set-cookie").unwrap(), "cookie=42");
     }
 
-    #[test]
-    fn deserialize_cors() {
-        fn assert_cors(query_string: &str, enabled: bool) {
+    #[tokio::test]
+    async fn deserialize_cors() {
+        async fn assert_cors(query_string: &str, enabled: bool) {
             let response = serde_qs::from_str::<Response>(query_string)
                 .unwrap()
-                .into_response();
+                .into_response()
+                .await;
             let headers = response.headers();
             if enabled {
                 assert_eq!(headers.get("access-control-allow-origin").unwrap(), "*");
@@ -221,21 +216,21 @@ mod tests {
             }
         }
 
-        assert_cors("b=body", false);
-        assert_cors("b=body&cors=true", true);
-        assert_cors("b=body&cors=false", false);
-        assert_cors("b=body&cors=n", false);
-        assert_cors("b=body&cors=", true);
-        assert_cors("b=body&cors", true);
+        assert_cors("b=body", false).await;
+        assert_cors("b=body&cors=true", true).await;
+        assert_cors("b=body&cors=false", false).await;
+        assert_cors("b=body&cors=n", false).await;
+        assert_cors("b=body&cors=", true).await;
+        assert_cors("b=body&cors", true).await;
     }
 
-    #[test]
-    fn deserialize_b64() {
+    #[tokio::test]
+    async fn deserialize_b64() {
         let query_string = "body.b64=SGVsbG8sIHdvcmxkIQ%3D"; // invalid padding, should be '=='
 
         let response: Response = serde_qs::from_str(query_string).unwrap();
 
         assert_eq!(response.body_b64, Some("SGVsbG8sIHdvcmxkIQ=".to_string()));
-        assert_eq!(response.get_body().unwrap(), b"Hello, world!");
+        assert_eq!(response.get_body().await.unwrap().0, b"Hello, world!");
     }
 }

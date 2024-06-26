@@ -12,16 +12,8 @@ pub mod response;
 
 type Err = Box<dyn error::Error>;
 
-const GIST_REGEXES: &[(&str, &str)] = &[
-    (
-        r"^gist\.(?:github|githubusercontent)\.com/(.+?)/([a-f0-9]+)$",
-        "https://gist.githubusercontent.com/$1/$2/raw",
-    ),
-    (
-        r"^gist\.(?:github|githubusercontent)\.com/(.+?)/([a-f0-9]+)/raw/(.+)$",
-        "https://gist.githubusercontent.com/$1/$2/raw/$3",
-    ),
-];
+const GIST_ID_REGEX: &str = r"(^|\W)([a-f0-9]{32})(\W|$)";
+const GIST_FILE_REGEX: &str = r"(\/([^/]+)$)";
 
 pub async fn index(request: Request) -> Result<axum::response::Response, String> {
     let path = request.uri().path().to_string();
@@ -47,24 +39,41 @@ pub async fn index(request: Request) -> Result<axum::response::Response, String>
     Ok(response.into_response().await)
 }
 
-pub fn parse_gist_url(url: &str) -> Result<String, Err> {
-    let url = url
-        .trim()
-        .trim_start_matches("https://")
-        .trim_start_matches("http://");
-    if !url.starts_with("gist.github.com/") && !url.starts_with("gist.githubusercontent.com/") {
-        return Err(
-            "Invalid Gist domain (must be gist.github.com or gist.githubusercontent.com)".into(),
-        );
+pub async fn get_gist_content(url: &str) -> Result<(Vec<u8>, Option<String>), Err> {
+    let re_id = Regex::new(GIST_ID_REGEX)?;
+    let re_file = Regex::new(GIST_FILE_REGEX)?;
+    let captures = re_id.captures(url).ok_or("Invalid gist format")?;
+    let id = captures.get(2).unwrap().as_str().to_string();
+    let captures = re_file.captures(url);
+    let file = captures.map(|cap| cap.get(2).unwrap().as_str().to_string());
+
+    let client = reqwest::Client::new();
+    let files = client
+        .get(format!("https://api.github.com/gists/{id}"))
+        .header("User-Agent", "reqwest")
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    let files = files
+        .get("files")
+        .ok_or("files key found")?
+        .as_object()
+        .ok_or("Files not an object")?;
+
+    let file = match file {
+        Some(file) if files.contains_key(&file) => files.get(&file).ok_or("No file found")?,
+        _ => files.values().next().ok_or("No files found")?,
     };
+    let content = file
+        .get("content")
+        .ok_or("No content found")?
+        .as_str()
+        .ok_or("Content not a string")?;
+    let content_type = file
+        .get("type")
+        .and_then(|t| t.as_str().map(|s| s.to_string()));
 
-    for (regex, replacement) in GIST_REGEXES {
-        let re = Regex::new(regex).unwrap();
-        if re.captures(url).is_some() {
-            let replaced = re.replace(url, *replacement);
-            return Ok(replaced.to_string());
-        }
-    }
-
-    Err("Unrecognized gist URL format".into())
+    Ok((content.as_bytes().to_vec(), content_type))
 }
