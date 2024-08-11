@@ -39,10 +39,15 @@ export const SNIPPETS = {
   },
   "json": {
     "!proto": {
-      "description": "Insert a __proto__ property",
+      "description": "Insert a __proto__ and prototype.constructor property",
       "code": `"__proto__": {
-\t"$1": $0
-}`
+\t"$1": $2
+},
+"constructor": {
+\t"prototype": {
+\t\t"$1": $2
+\t}
+}$0`
     }
   },
   "xml": {

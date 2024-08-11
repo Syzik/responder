@@ -28,6 +28,7 @@ const MONACO_EDITOR_OPTIONS = {
   formatOnType: true,
   formatOnPaste: true,
   autoIndent: true,
+  tabSize: 2,
   wordWrap: 'on'
 }
 
