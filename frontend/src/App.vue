@@ -4,7 +4,8 @@ import { SelectLanguage, HeaderTable, StatusField } from '@/components'
 import { CORS_HEADERS, HEADER_ALIAS, SNIPPETS, TIPS, hasCORS } from '@/utils'
 
 import { useToast } from 'primevue/usetoast'
-import { emmetHTML } from 'emmet-monaco-es'
+import { emmetHTML, emmetCSS } from 'emmet-monaco-es'
+import { useMonacoEx } from 'monaco-editor-ex'
 import mime from 'mime'
 
 const previewChecked = ref(false)
@@ -25,16 +26,23 @@ const currentTip = ref(0)
 
 const MONACO_EDITOR_OPTIONS = {
   automaticLayout: true,
-  formatOnType: true,
-  formatOnPaste: true,
   autoIndent: true,
+  formatOnPaste: false,
   tabSize: 2,
+  insertSpaces: true,
   wordWrap: 'on'
 }
 
 const editorRef = shallowRef()
 const handleMount = (editor) => {
+  useMonacoEx(window.monaco)
+  // For some reason need to load the languages once
+  const language = editor.getModel().getLanguageId()
+  editor.getModel().setLanguage('javascript')
+  editor.getModel().setLanguage('css')
+  editor.getModel().setLanguage(language)
   emmetHTML(window.monaco)
+  emmetCSS(window.monaco)
 
   editorRef.value = editor
   editor.onKeyDown((e) => {
