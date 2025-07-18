@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  responder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PORT: 8000
+    ports:
+      - "${HOST:-0.0.0.0}:${PORT:-8000}:8000"
+    restart: unless-stopped
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+    # volumes:
+      # Uncomment if you need persistent storage
+      # - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s

@@ -29,7 +29,19 @@ If you have any other questions, feel free to ask in an [Issue](https://github.c
 > [!WARNING]  
 > Because this tool is hosted on my own domain, I will be able to view any traffic going to and from my server. Keep this in mind when creating PoC's for real-world scenarios and consider self-hosting it on a server you control.
 
-Build and run the repository like this:
+## Install
+
+### .env File
+
+Create a `.env` file at the root of the project (based on `.env.example`):
+
+```bash
+# Customize these values according to your needs
+PORT=8000           # Port to expose on the host machine
+HOST=0.0.0.0        # Currently not used for host binding
+```
+
+### Build from source:
 
 ```bash
 cd frontend/
@@ -40,6 +52,12 @@ cd ../
 cargo build --release
 
 ./target/release/responder
+```
+
+### Build from docker:
+
+```bash
+docker-compose up -d --build
 ```
 
 **Be careful on which domain you run this tool**. The domain must not host any other applications that rely only on SameSite for CSRF protection ([read more](https://book.jorianwoltjer.com/web/cross-site-request-forgery-csrf)). This application is vulnerable to XSS by design, so it may be abused to send same-site requests with authentication.
