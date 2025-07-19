@@ -37,8 +37,8 @@ Create a `.env` file at the root of the project (based on `.env.example`):
 
 ```bash
 # Customize these values according to your needs
-PORT=8000           # Port to expose on the host machine
-HOST=0.0.0.0        # Currently not used for host binding
+PORT=8000 
+HOST=0.0.0.0
 ```
 
 ### Build from source:
